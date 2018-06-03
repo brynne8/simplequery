@@ -196,34 +196,57 @@ $.extend($, {
 /*--------------------------------------------------------------
 Manipulation module
 --------------------------------------------------------------*/
+function getFragment(obj) {
+    var fragment = document.createDocumentFragment();
+    fragment.append(...$(obj).nodes);
+    return fragment;
+}
 $.fn.extend({
-    append: function(obj) {
-        return this.each(function(i, el) {
-            $(obj).each(function(i, objEl) {
-                el.appendChild(objEl);
+    append: function(content) {
+        if (typeof content === 'string') {
+            return this.each(function(i, el) {
+                el.insertAdjacentHTML('beforeend', content);
             });
-        });
+        } else {
+            var fragment = getFragment($(content));
+            return this.each(function(i, el) {
+                el.appendChild(fragment.cloneNode(true));
+            });
+        }
     },
-    prepend: function(obj) {
-        return this.each(function(i, el) {
-            $(obj).each(function(i, objEl) {
-                el.insertBefore(objEl, el.firstChild);
+    prepend: function(content) {
+        if (typeof content === 'string') {
+            return this.each(function(i, el) {
+                el.insertAdjacentHTML('afterbegin', content);
             });
-        });
+        } else {
+            var fragment = getFragment($(content));
+            return this.each(function(i, el) {
+                if (el.firstChild) {
+                    el.insertBefore(fragment.cloneNode(true), el.firstChild);
+                } else {
+                    el.appendChild(fragment.cloneNode(true));
+                }
+            });
+        }
     },
-    appendTo: function(obj) {
-        return this.each(function(i, el) {
-            $(obj).each(function(i, objEl) {
-                objEl.appendChild(el);
-            });
+    appendTo: function(target) {
+        var fragment = getFragment(this);
+        $(target).each(function(i, el) {
+            el.appendChild(fragment.cloneNode(true));
         });
+        return this;
     },
-    prependTo: function(obj) {
-        return this.each(function(i, el) {
-            $(obj).each(function(i, objEl) {
-                objEl.insertBefore(el, objEl.firstChild);
-            });
+    prependTo: function(target) {
+        var fragment = getFragment(this);
+        $(target).each(function(i, el) {
+            if (el.firstChild) {
+                el.insertBefore(fragment.cloneNode(true), el.firstChild);
+            } else {
+                el.appendChild(fragment.cloneNode(true));
+            }
         });
+        return this;
     },
     remove: function() {
         return this.each(function() {
@@ -368,5 +391,41 @@ $.fn.extend({
         this.each(function(i, el) {
             el.addEventListener('click', handler, false);
         })
+    }
+});
+/*--------------------------------------------------------------
+Classes module
+requires browser features: 'classList' in el
+--------------------------------------------------------------*/
+function classHandlerProxy(className, callback) {
+    var classNames = $.trim(className).split(' ');
+    return this.each(function(i, el) {
+        $.each(classNames, function(i, singleClass) {
+            callback(el, singleClass);
+        });
+    });
+}
+$.fn.extend({
+    addClass: function(className) {
+        return classHandlerProxy.call(this, className, function(el, singleClass) {
+            el.classList.add(singleClass);
+        });
+    },
+    removeClass: function(className) {
+        return classHandlerProxy.call(this, className, function(el, singleClass) {
+            el.classList.remove(singleClass);
+        });
+    },
+    hasClass: function(className) {
+        return this.nodes[0].classList.contains(className);
+    },
+    toggleClass: function(className, condition) {
+        return classHandlerProxy.call(this, className, function(el, singleClass) {
+            if (typeof condition !== 'undefined') {
+                el.classList[condition ? 'add' : 'remove'](singleClass);
+            } else {
+                el.classList.toggle(singleClass);
+            }
+        });
     }
 });
