@@ -230,6 +230,30 @@ $.fn.extend({
             });
         }
     },
+    after: function(content) {
+        if (typeof content === 'string') {
+            return this.each(function(i, el) {
+                el.insertAdjacentHTML('afterend', content);
+            });
+        } else {
+            var fragment = getFragment($(content));
+            return this.each(function(i, el) {
+                el.after(fragment.cloneNode(true));
+            });
+        }
+    },
+    before: function(content) {
+        if (typeof content === 'string') {
+            return this.each(function(i, el) {
+                el.insertAdjacentHTML('beforebegin', content);
+            });
+        } else {
+            var fragment = getFragment($(content));
+            return this.each(function(i, el) {
+                el.before(fragment.cloneNode(true));
+            });
+        }
+    },
     appendTo: function(target) {
         var fragment = getFragment(this);
         $(target).each(function(i, el) {
@@ -335,7 +359,11 @@ $.fn.extend({
         }));
     },
     filter: function(selector) {
-        return $($.map(this.nodes, function(el) {
+        if (typeof selector === 'function') {
+            this.nodes = this.nodes.filter(selector);
+            return this;
+        }
+        return selector$($.map(this.nodes, function(el) {
             return $.matches(el, selector) ? el : null;
         }));
     },
@@ -359,6 +387,16 @@ $.fn.extend({
     },
     last: function() {
         return this.eq(this.length - 1);
+    },
+    next: function(selector) {
+        return this.map(function () {
+            return this.nextElementSibling;
+        }).filter(selector);
+    },
+    prev: function(selector) {
+        return this.map(function () {
+            return this.previousElementSibling;
+        }).filter(selector);
     }
 });
 /*--------------------------------------------------------------
@@ -427,5 +465,27 @@ $.fn.extend({
                 el.classList.toggle(singleClass);
             }
         });
+    }
+});
+/*--------------------------------------------------------------
+Attributes module
+--------------------------------------------------------------*/
+$.fn.extend({
+    attr: function(name, value) {
+        return typeof value !== 'undefined' ? this.each(function() {
+            this.setAttribute(name, value);
+        }) : this.get(0).getAttribute(name);
+    },
+    removeAttr: function(name) {
+        return this.each(function() {
+            this.removeAttribute(name);
+        });
+    },
+    val: function(value) {
+        if (typeof value === 'undefined') {
+            return this.get(0).value;
+        }
+        this.get(0).value = value;
+        return this;
     }
 });
