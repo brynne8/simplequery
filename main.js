@@ -1,10 +1,4 @@
-/*--------------------------------------------------------------
-Core module
-requires browser features:
-'querySelectorAll' in el
-'isArray' in Array
-el.matches || el.matchesSelector || el.msMatchesSelector || el.mozMatchesSelector || el.webkitMatchesSelector || el.oMatchesSelector
---------------------------------------------------------------*/
+var document = null;
 function $(selector) {
     return selector instanceof $ ? selector : this instanceof $ ? this.init(selector) : new $(selector);
 }
@@ -49,6 +43,9 @@ var api = {
     }
 };
 var utils = {
+    setDocumemt: function(doc) {
+        document = doc;
+    },
     isArray: Array.isArray,
     each: function(collection, callback) {
         if ($.isArray(collection)) {
@@ -108,91 +105,6 @@ var utils = {
 };
 $.prototype = $.fn = api;
 utils.extend($, utils);
-/*--------------------------------------------------------------
-Deferred module
---------------------------------------------------------------*/
-function Deferred() {
-    this.currentState = 'pending';
-    this.onDone = [];
-    this.onFail = [];
-}
-function settle(method, args) {
-    var settleViaResolve = method === 'resolve';
-    if (this.currentState === 'pending') {
-        this.currentState = settleViaResolve ? 'resolved' : 'rejected';
-        this[settleViaResolve ? 'doneWith' : 'failedWith'] = args;
-        $.each(this[settleViaResolve ? 'onDone' : 'onFail'], function(i, callback) {
-            callback.apply(this, args);
-        });
-    }
-    return this;
-}
-Deferred.prototype = {
-    state: function() {
-        return this.currentState;
-    },
-    then: function(done, fail) {
-        done && this.done(done);
-        fail && this.fail(fail);
-        return this;
-    },
-    always: function(callback) {
-        return this.then(callback, callback);
-    },
-    done: function(callback) {
-        this.doneWith ? callback.apply(this, this.doneWith) : this.onDone.push(callback);
-        return this;
-    },
-    fail: function(callback) {
-        this.failedWith ? callback.apply(this, this.failedWith) : this.onFail.push(callback);
-        return this;
-    },
-    resolve: function() {
-        return settle.call(this, 'resolve', $.slice(arguments));
-    },
-    reject: function() {
-        return settle.call(this, 'reject', $.slice(arguments));
-    }
-};
-$.extend($, {
-    Deferred: function() {
-        return new Deferred();
-    },
-    when: function() {
-        var deferreds = $.slice(arguments);
-        var whenDeferred = $.Deferred();
-        var checkDeferreds = function() {
-            var resolvedArgs = [];
-            var rejectedArgs;
-            $.each(deferreds, function(i, deferred) {
-                if (deferred instanceof Deferred) {
-                    if (deferred.state() === 'resolved') {
-                        resolvedArgs.push(deferred.doneWith);
-                    } else if (deferred.state() === 'rejected') {
-                        rejectedArgs = deferred.failedWith;
-                        return false;
-                    }
-                } else {
-                    resolvedArgs.push([deferred]);
-                }
-            });
-            if (rejectedArgs) {
-                settle.call(whenDeferred, 'reject', rejectedArgs);
-            }
-            if (resolvedArgs.length === deferreds.length) {
-                resolvedArgs = deferreds.length === 1 ? resolvedArgs[0] : $.map(resolvedArgs, function(args) {
-                    return args.length === 1 ? args[0] : args;
-                });
-                settle.call(whenDeferred, 'resolve', resolvedArgs);
-            }
-        };
-        $.each(deferreds, function(i, deferred) {
-            deferred instanceof Deferred && deferred.always(checkDeferreds);
-        });
-        checkDeferreds();
-        return whenDeferred;
-    }
-});
 /*--------------------------------------------------------------
 Manipulation module
 --------------------------------------------------------------*/
@@ -400,35 +312,58 @@ $.fn.extend({
     }
 });
 /*--------------------------------------------------------------
-Events module
-requires browser features: 'addEventListener' in el, 'removeEventListener' in el
+Utils module
+requires browser features:
 --------------------------------------------------------------*/
+$.extend($, {
+    isEmptyObject: function(obj) {
+        var name;
+        for (name in obj) { return false; }
+        return true;
+    },
+    isNumeric: function(n) {
+        return !isNaN(parseFloat(n)) && isFinite(n);
+    },
+    contains: function(container, el) {
+        var contains = false,
+            parent = el.parentNode;
+        while (parent && parent.nodeType === 1) {
+            if (parent === container) {
+                contains = true;
+                break;
+            }
+            parent = parent.parentNode;
+        }
+        return contains;
+    },
+    param: function(obj) {
+        var serialized = $.isArray(obj);
+        return $.map(obj, function(item, key) {
+            return encodeURIComponent(serialized ? item.name : key) + '=' + encodeURIComponent(serialized ? item.value : item);
+        }).join('&');
+    },
+    parseJSON: function(data) {
+        return JSON.parse(data);
+    }
+});
 $.fn.extend({
-    ready: function (handler) {
-        document.addEventListener("DOMContentLoaded", function() {
-            handler();
+    serializeArray: function() {
+        return $.map(this[this.is('form') ? 'find' : 'filter']('input, textarea, select').nodes, function(el) {
+            if (el.disabled) {
+                return null;
+            } if (el.type === 'radio' || el.type === 'checkbox') {
+                return el.checked ? {name: el.name, value: el.value} : null;
+            } else if (el.type === 'select-multiple') {
+                return {name: el.name, value: $.map(el.options, function(option) {
+                    return option.selected ? option.value : undefined;
+                })};
+            } else {
+                return {name: el.name, value: el.value};
+            }
         });
     },
-    on: function(eventType, selector, handler) {
-        var eventHandler = handler || selector,
-            $collection = handler ? this.find(selector) : this;
-        $collection.each(function(i, el) {
-            el.addEventListener(eventType.split('.')[0], eventHandler, false);
-        });
-        return this;
-    },
-    off: function(eventType, selector, handler) {
-        var eventHandler = handler || selector,
-            $collection = handler ? this.find(selector) : this;
-        $collection.each(function(i, el) {
-            el.removeEventListener(eventType.split('.')[0], eventHandler, false);
-        });
-        return this;
-    },
-    click: function (handler) {
-        this.each(function(i, el) {
-            el.addEventListener('click', handler, false);
-        })
+    serialize: function() {
+        return $.param(this.serializeArray());
     }
 });
 /*--------------------------------------------------------------
@@ -489,80 +424,5 @@ $.fn.extend({
         return this;
     }
 });
-/*--------------------------------------------------------------
-Ajax module
-requires browser features: 'XMLHttpRequest' in window
---------------------------------------------------------------*/
-var ajaxDefaults = {
-    url: '',
-    method: 'GET',
-    data: null,
-    contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
-    dataType: 'html',
-    xhrFields: {
-        withCredentials: false
-    }
-};
-function ajax(options) {
-    options = $.extend({}, ajaxDefaults, options);
-    if (options.data && typeof options.data !== 'string') {
-        options.data = $.param(options.data);
-    }
-    var request = new XMLHttpRequest();
-    var deferred = $.Deferred();
-    var onError = function() {
-        var args = $.slice(arguments);
-        var ref = args[0].target;
-        args[0] = $.extend(args[0], {
-            responseText: ref.responseText,
-            status: ref.status,
-            statusText: ref.statusText
-        });
-        options.error && options.error.apply(this, args);
-        deferred.reject.apply(deferred, args);
-    };
-    if (options.method === 'GET' && options.data) {
-        options.url += (options.url.indexOf('?') >= 0 ? '&' : '?') + options.data;
-    }
-    request.open(options.method, options.url, true);
-    request.withCredentials = options.xhrFields && options.xhrFields.withCredentials;
-    request.setRequestHeader('Content-type', options.contentType);
-    request.onload = function() {
-        var contentType = request.status === 204 ? '' : request.getResponseHeader('content-type');
-        var responseText = request.responseText;
-        if (request.status >= 200 && request.status < 400) {
-            var args = [contentType.indexOf('json') > -1 ? JSON.parse(responseText) : responseText, request.status, request];
-            if (options.dataType === 'script') {
-                window.eval.call(window, $.trim(responseText));
-            }
-            if (typeof options.success === 'function') {
-                options.success.apply(this, args);
-            }
-            deferred.resolve.apply(deferred, args);
-        } else {
-            onError.apply(this, arguments);
-        }
-    };
-    request.onerror = onError;
-    request.send(options.data);
-    return deferred;
-}
-function shortAjax(method, url, data, callback) {
-    return ajax({
-        url: url,
-        method: method,
-        data: callback ? data : (typeof data === 'function' ? null : data),
-        success: callback || (typeof data === 'function' ? data : null)
-    });
-}
-$.extend($, {
-    ajax: function(options) {
-        return ajax(options);
-    },
-    get: function(url, data, callback) {
-        return shortAjax('GET', url, data, callback);
-    },
-    post: function(url, data, callback) {
-        return shortAjax('POST', url, data, callback);
-    }
-});
+
+export { $ }
